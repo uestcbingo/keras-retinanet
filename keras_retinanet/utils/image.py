@@ -28,7 +28,9 @@ def read_image_bgr(path):
     Args
         path: Path to the image.
     """
-    image = np.asarray(Image.open(path).convert('RGB'))
+    im = Image.open(path).convert('RGB')
+    image = np.asarray(im)
+    im.close()
     return image[:, :, ::-1].copy()
 
 
