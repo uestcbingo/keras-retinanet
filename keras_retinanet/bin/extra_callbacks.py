@@ -11,11 +11,16 @@ import io
 plt.rcParams['figure.figsize']=(20,15)
 import os
 
+from time import gmtime, strftime
+import scipy.misc
+
+
 sys.path.append('../../')
 from keras_retinanet import models
 from keras_retinanet.utils.image import read_image_bgr, preprocess_image, resize_image
 from keras_retinanet.utils.visualization import draw_box, draw_caption
 from keras_retinanet.utils.colors import label_color
+import glob
 #import models
 #from utils.image import read_image_bgr, preprocess_image, resize_image
 #from utils.visualization import draw_box, draw_caption
@@ -23,23 +28,37 @@ from keras_retinanet.utils.colors import label_color
 
 
 test_list =[]
-test_file_path = '/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190217/test_list.csv'
+test_file_path = '/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/combined/valid_list_20190509.csv'
+#demo_image_folder = '/home/crsc/kxb/TrainingDemoIm/Pedestrian/20190410/'
+
 with open(test_file_path, 'r') as f:
     csv_reader = csv.reader(f)
     for row in csv_reader:
         test_list.append(row[0])
 
+
+#test if image exists:
+for test_label in test_list:
+    if(os.path.splitext(test_label)[1] == '.txt'):
+        image_name = test_label.replace('AllSamples/Label', 'AllSamples/Image').replace('.txt','.jpg')
+        image_name = image_name.replace('Caffe/Labels', 'Caffe/Images')
+    else:
+        image_name = test_label.replace('Labels', 'Images').replace('.json', '.jpg')
+    assert(os.path.exists(image_name))
+
 print(len(test_list))
 
-def predict(model):
+
+def predict(model,demo_image_folder):
     id = np.random.randint(low=0,high=len(test_list))
     label_name = test_list[id]
     image_name = ''
     if(os.path.splitext(label_name)[1] == '.txt'):
-        image_name = label_name.replace('Label','Image').replace('.txt','.jpg')
+        image_name = label_name.replace('AllSamples/Label', 'AllSamples/Image').replace('.txt','.jpg')
+        image_name = image_name.replace('Caffe/Labels', 'Caffe/Images')
     else:
         image_name = label_name.replace('Labels', 'Images').replace('.json', '.jpg')
-    labels_to_names = {0: 'bg', 1: 'ped', 2: 'rb'}
+    labels_to_names = {0: 'bg', 1: 'ped', 2: 'rb', 3:'train'}
     # load image
     image = read_image_bgr(image_name)
 
@@ -58,7 +77,7 @@ def predict(model):
     # visualize detections
     for box, score, label in zip(boxes[0], scores[0], labels[0]):
         # scores are sorted so we can break
-        if score < 0.5:
+        if score < 0.2:
             break
 
         color = label_color(label)
@@ -73,6 +92,9 @@ def predict(model):
     plt.axis('off')
     plt.imshow(draw)
     #plt.show()
+    time_str = strftime("%Y%m%d_%H:%M:%S", gmtime())
+    #plt.savefig(demo_image_folder+time_str+".jpg")
+    scipy.misc.imsave(demo_image_folder+time_str+".jpg",draw)
 
     output = io.BytesIO()
     plt.savefig(output, format='png')
@@ -88,14 +110,18 @@ def predict(model):
 
 
 class VisualizeTrainingResult(cbks.Callback):
-    def __init__(self,writer):
+    def __init__(self,writer, demo_folder):
         super(VisualizeTrainingResult,self).__init__()
+
+        file_list = glob.glob(writer +"/*")
+        [os.remove(file_name) for file_name in file_list]
         self.writer = tf.summary.FileWriter(writer)
+        self.demo_folder = demo_folder
 
 
     def on_batch_end(self, batch, logs=None):
         if (batch % 500 == 0):
-            image = predict( self.model)
+            image = predict( self.model, self.demo_folder)
             summary = tf.Summary(value=[tf.Summary.Value(tag='predict', image=image)])
             #writer = tf.summary.FileWriter('/home/crsc/kxb/TrainingLog/Pedestrain/keras-retina/20190221/')
             self.writer.add_summary(summary,batch)

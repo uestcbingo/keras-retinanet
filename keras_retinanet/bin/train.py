@@ -151,7 +151,7 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
     callbacks = []
 
     tensorboard_callback = None
-    extra_cbk = extra_callbacks.VisualizeTrainingResult(writer= args.tensorboard_dir)
+    extra_cbk = extra_callbacks.VisualizeTrainingResult(writer= args.tensorboard_dir, demo_folder=args.demo_folder)
 
     if args.tensorboard_dir:
         tensorboard_callback = keras.callbacks.TensorBoard(
@@ -199,7 +199,7 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
     callbacks.append(keras.callbacks.ReduceLROnPlateau(
         monitor    = 'loss',
         factor     = 0.1,
-        patience   = 2,
+        patience   = 50,
         verbose    = 1,
         mode       = 'auto',
         min_delta  = 0.0001,
@@ -405,6 +405,7 @@ def parse_args(args):
     parser.add_argument('--lr',               help='Learning rate.', type=float, default=1e-5)
     parser.add_argument('--snapshot-path',    help='Path to store snapshots of models during training (defaults to \'./snapshots\')', default='./snapshots')
     parser.add_argument('--tensorboard-dir',  help='Log directory for Tensorboard output', default='./logs')
+    parser.add_argument('--demo-folder', help='folder to save demo images', default='./demo_image')
     parser.add_argument('--no-snapshots',     help='Disable saving snapshots.', dest='snapshots', action='store_false')
     parser.add_argument('--no-evaluation',    help='Disable per epoch evaluation.', dest='evaluation', action='store_false')
     parser.add_argument('--freeze-backbone',  help='Freeze training of backbone layers.', action='store_true')

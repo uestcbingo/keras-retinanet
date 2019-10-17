@@ -4,7 +4,9 @@
 # ## Load necessary modules
 
 # In[ ]:
-
+import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 # show images inline
 #get_ipython().magic(u'matplotlib inline')
@@ -60,10 +62,10 @@ keras.backend.tensorflow_backend.set_session(get_session())
 # adjust this to point to your downloaded/trained model
 # models can be downloaded here: https://github.com/fizyr/keras-retinanet/releases
 #model_path = os.path.join('..', 'snapshots', 'resnet50_coco_best_v2.1.0.h5')
-model_path = '/home/crsc/kxb/TrainingModels/pedestrian/keras-retina/20190220/resnet50_csv_23.h5'
+model_path = '/home/crsc/kxb/TrainingModels/pedestrian/keras-retina/20190220/resnet50_csv_30.h5'
 
 # load retinanet model
-model = models.load_model(model_path, backbone_name='resnet50')
+model1 = models.load_model(model_path, backbone_name='resnet50')
 
 # if the model is not converted to an inference model, use the line below
 # see: https://github.com/fizyr/keras-retinanet#converting-a-training-model-to-inference-model
@@ -81,7 +83,24 @@ labels_to_names = {0: 'bg', 1: 'ped', 2: 'rb'}
 
 
 # load image
-image = read_image_bgr('/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples/Image20181113/SnapShot_20181113_1000093.jpg')
+#image = read_image_bgr('/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190217/Images/Guangzhou_OutSation_Images_1000229.jpg')
+
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190217/Images/Guangzhou_InStation_Images_1000016.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190409/Images/Xining_Squares_20171210000125_2823.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190410/Images/Buyang_Platform_155194576510003.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190410/Images/DongguanEast_StationSquare_155194988610043.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190410/Images/Nanchang_StationSquare_155194762510043.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190410/Images/Shenzhen_SecurityCheck_155194808510010.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190410/Images/HefeiSouth_StationSquare_155194697210018.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190410/Images/DongguanEast_StationSquare_155195029910041.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190409/Images/Xining_Squares_1007351.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190410/Images/Shenzhen_SecurityCheck_155194808510010.jpg"
+#image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190410/Images/Buyang_SecurityCheck_155194613010007.jpg"
+image_name = "/home/crsc/kxb/TrainingSamples/Pedestrian/AllSamples-Labelme/20190217/Images/Guangzhou_InStation_Images_1000025.jpg"
+
+
+
+image = read_image_bgr(image_name)
 
 # copy to draw on
 draw = image.copy()
@@ -92,10 +111,14 @@ image = preprocess_image(image)
 image, scale = resize_image(image)
 
 # process image
-start = time.time()
-res = model.predict_on_batch(np.expand_dims(image, axis=0))
-boxes, scores, labels = model.predict_on_batch(np.expand_dims(image, axis=0))
-print("processing time: ", time.time() - start)
+
+model = models.convert_model(model1, nms=True, class_specific_filter=False,
+                             anchor_params=None)
+image1 = np.expand_dims(image, axis=0)
+for i in range(100):
+    start = time.time()
+    boxes, scores, labels = model.predict_on_batch(image1)
+    #print("processing time: ", time.time() - start)
 
 # correct for image scale
 boxes /= scale
@@ -103,7 +126,7 @@ boxes /= scale
 # visualize detections
 for box, score, label in zip(boxes[0], scores[0], labels[0]):
     # scores are sorted so we can break
-    if score < 0.5:
+    if score < 0.2:
         break
         
     color = label_color(label)
@@ -111,11 +134,12 @@ for box, score, label in zip(boxes[0], scores[0], labels[0]):
     b = box.astype(int)
     draw_box(draw, b, color=color)
     
-    caption = "{} {:.3f}".format(labels_to_names[label], score)
-    draw_caption(draw, b, caption)
+    #caption = "{} {:.3f}".format(labels_to_names[label], score)
+    #draw_caption(draw, b, caption)
     
 plt.figure(figsize=(15, 15))
 plt.axis('off')
 plt.imshow(draw)
 plt.show()
+print("done")
 
