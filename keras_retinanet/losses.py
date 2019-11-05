@@ -53,6 +53,9 @@ def focal(alpha=0.25, gamma=2.0):
         alpha_factor = keras.backend.ones_like(labels) * alpha
         alpha_factor = backend.where(keras.backend.equal(labels, 1), alpha_factor, 1 - alpha_factor)
         focal_weight = backend.where(keras.backend.equal(labels, 1), 1 - classification, classification)
+
+        #for small objects it shold add an item like
+        #focal_weight = alpha_factor * (focal_weight*small_weight) ** gamma
         focal_weight = alpha_factor * focal_weight ** gamma
 
         cls_loss = focal_weight * keras.backend.binary_crossentropy(labels, classification)
