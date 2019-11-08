@@ -85,8 +85,15 @@ def anchor_targets_bbox(
 
     batch_size = len(image_group)
 
+    #regression has 5 cols, 4 for coordinates and 1 for valid or not
     regression_batch  = np.zeros((batch_size, anchors.shape[0], 4 + 1), dtype=keras.backend.floatx())
     labels_batch      = np.zeros((batch_size, anchors.shape[0], num_classes + 1), dtype=keras.backend.floatx())
+
+    regression_batch_gt = np.zeros((batch_size, anchors.shape[0], 4 + 2), dtype=keras.backend.floatx())
+    labels_batch_gt = np.zeros((batch_size, anchors.shape[0], num_classes + 2), dtype=keras.backend.floatx())
+
+    #added by kongxiangbin
+    gt_batch = np.zeros((batch_size, anchors.shape[0]), dtype=keras.backend.floatx())
 
     # compute labels and regression targets
     for index, (image, annotations) in enumerate(zip(image_group, annotations_group)):
@@ -104,6 +111,13 @@ def anchor_targets_bbox(
             labels_batch[index, positive_indices, annotations['labels'][argmax_overlaps_inds[positive_indices]].astype(int)] = 1
 
             regression_batch[index, :, :-1] = bbox_transform(anchors, annotations['bboxes'][argmax_overlaps_inds, :])
+            #added by kongxiangbin
+            bboxes = annotations['bboxes']
+            bboxes_area = abs((bboxes[:,2] - bboxes[:,0]) * (bboxes[:,3] - bboxes[:,1]))
+            gt_temp = bboxes_area[argmax_overlaps_inds] * np.asarray(positive_indices,dtype=np.float) + 1
+            #if gt_batch[index] > 2600, it should be set to 2 else
+            gt_temp[gt_temp>2600] = 2
+            gt_batch[index] = gt_temp
 
         # ignore annotations outside of image
         if image.shape:
@@ -113,7 +127,14 @@ def anchor_targets_bbox(
             labels_batch[index, indices, -1]     = -1
             regression_batch[index, indices, -1] = -1
 
-    return regression_batch, labels_batch
+    for idx, val in enumerate(gt_batch):
+        gt = np.expand_dims(val,axis=-1)
+        reg = regression_batch[idx]
+        label = labels_batch[idx]
+        regression_batch_gt[idx] = np.concatenate([reg,gt],axis =-1)
+        labels_batch_gt[idx] = np.concatenate([label,gt], axis=-1)
+    #return regression_batch, labels_batch
+    return regression_batch_gt, labels_batch_gt
 
 
 def compute_gt_annotations(

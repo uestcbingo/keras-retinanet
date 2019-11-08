@@ -16,6 +16,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import tensorflow.contrib.eager as tfe
+tfe.enable_eager_execution()
+
 import argparse
 import os
 import sys
@@ -30,6 +33,7 @@ import keras
 import keras.preprocessing.image
 import tensorflow as tf
 import extra_callbacks
+
 
 # Allow relative imports when being executed as script.
 if __name__ == "__main__" and __package__ is None:
