@@ -45,6 +45,7 @@ def focal(alpha=0.25, gamma=2.0):
         labels         = y_true[:, :, :-2]
         anchor_state   = y_true[:, :, -2]  # -1 for ignore, 0 for background, 1 for object
         areas = y_true[:,:,-1]
+        areas = keras.backend.expand_dims(areas,axis=-1)
 
         classification = y_pred
 
@@ -108,6 +109,7 @@ def smooth_l1(sigma=3.0):
         regression_target = y_true[:, :, :-2]
         anchor_state      = y_true[:, :, -2]
         areas = y_true[:,:,-1]
+        areas = keras.backend.expand_dims(areas,axis=-1)
 
 
         # filter out "ignore" anchors
