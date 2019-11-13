@@ -54,8 +54,11 @@ from ..preprocessing.open_images import OpenImagesGenerator
 from ..preprocessing.pascal_voc import PascalVocGenerator
 from ..utils.anchors import make_shapes_callback
 from ..utils.config import read_config_file, parse_anchor_parameters
+from ..utils.gpu import setup_gpu
+from ..utils.image import random_visual_effect_generator
 from ..utils.keras_version import check_keras_version
 from ..utils.model import freeze as freeze_model
+from ..utils.tf_version import check_tf_version
 from ..utils.transform import random_transform_generator
 
 
@@ -68,14 +71,6 @@ def makedirs(path):
     except OSError:
         if not os.path.isdir(path):
             raise
-
-
-def get_session():
-    """ Construct a modified tf session.
-    """
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    return tf.Session(config=config)
 
 
 def model_with_weights(model, weights, skip_mismatch):
@@ -175,7 +170,6 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
             embeddings_metadata    = None,
             update_freq = 200
         )
-        callbacks.append(tensorboard_callback)
 
     if args.evaluation and validation_generator:
         if args.dataset_type == 'coco':
@@ -215,7 +209,11 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
         cooldown   = 0,
         min_lr     = 0
     ))
+
     callbacks.append(extra_cbk)
+
+    if args.tensorboard_dir:
+        callbacks.append(tensorboard_callback)
     return callbacks
 
 
@@ -231,6 +229,7 @@ def create_generators(args, preprocess_image):
         'config'           : args.config,
         'image_min_side'   : args.image_min_side,
         'image_max_side'   : args.image_max_side,
+        'no_resize'        : args.no_resize,
         'preprocess_image' : preprocess_image,
     }
 
@@ -248,8 +247,15 @@ def create_generators(args, preprocess_image):
             flip_x_chance=0.5,
             flip_y_chance=0.5,
         )
+        visual_effect_generator = random_visual_effect_generator(
+            contrast_range=(0.9, 1.1),
+            brightness_range=(-.1, .1),
+            hue_range=(-0.05, 0.05),
+            saturation_range=(0.95, 1.05)
+        )
     else:
         transform_generator = random_transform_generator(flip_x_chance=0.5)
+        visual_effect_generator = None
 
     if args.dataset_type == 'coco':
         # import here to prevent unnecessary dependency on cocoapi
@@ -259,12 +265,14 @@ def create_generators(args, preprocess_image):
             args.coco_path,
             'train2017',
             transform_generator=transform_generator,
+            visual_effect_generator=visual_effect_generator,
             **common_args
         )
 
         validation_generator = CocoGenerator(
             args.coco_path,
             'val2017',
+            shuffle_groups=False,
             **common_args
         )
     elif args.dataset_type == 'pascal':
@@ -272,12 +280,14 @@ def create_generators(args, preprocess_image):
             args.pascal_path,
             'trainval',
             transform_generator=transform_generator,
+            visual_effect_generator=visual_effect_generator,
             **common_args
         )
 
         validation_generator = PascalVocGenerator(
             args.pascal_path,
             'test',
+            shuffle_groups=False,
             **common_args
         )
     elif args.dataset_type == 'csv':
@@ -285,6 +295,7 @@ def create_generators(args, preprocess_image):
             args.annotations,
             args.classes,
             transform_generator=transform_generator,
+            visual_effect_generator=visual_effect_generator,
             **common_args
         )
 
@@ -292,6 +303,7 @@ def create_generators(args, preprocess_image):
             validation_generator = CSVGenerator(
                 args.val_annotations,
                 args.classes,
+                shuffle_groups=False,
                 **common_args
             )
         else:
@@ -305,6 +317,7 @@ def create_generators(args, preprocess_image):
             annotation_cache_dir=args.annotation_cache_dir,
             parent_label=args.parent_label,
             transform_generator=transform_generator,
+            visual_effect_generator=visual_effect_generator,
             **common_args
         )
 
@@ -315,6 +328,7 @@ def create_generators(args, preprocess_image):
             labels_filter=args.labels_filter,
             annotation_cache_dir=args.annotation_cache_dir,
             parent_label=args.parent_label,
+            shuffle_groups=False,
             **common_args
         )
     elif args.dataset_type == 'kitti':
@@ -322,12 +336,14 @@ def create_generators(args, preprocess_image):
             args.kitti_path,
             subset='train',
             transform_generator=transform_generator,
+            visual_effect_generator=visual_effect_generator,
             **common_args
         )
 
         validation_generator = KittiGenerator(
             args.kitti_path,
             subset='val',
+            shuffle_groups=False,
             **common_args
         )
     else:
@@ -421,11 +437,15 @@ def parse_args(args):
     parser.add_argument('--random-transform', help='Randomly transform image and annotations.', action='store_true')
     parser.add_argument('--image-min-side',   help='Rescale the image so the smallest side is min_side.', type=int, default=800)
     parser.add_argument('--image-max-side',   help='Rescale the image if the largest side is larger than max_side.', type=int, default=1333)
+    parser.add_argument('--no-resize',        help='Don''t rescale the image.', action='store_true')
     parser.add_argument('--config',           help='Path to a configuration parameters .ini file.')
     parser.add_argument('--weighted-average', help='Compute the mAP using the weighted average of precisions among classes.', action='store_true')
+    #parser.add_argument('--compute-val-loss', help='Compute validation loss during training', dest='compute_val_loss', action='store_true')
+
     # Fit generator arguments
-    parser.add_argument('--workers', help='Number of multiprocessing workers. To disable multiprocessing, set workers to 0', type=int, default=1)
-    parser.add_argument('--max-queue-size', help='Queue length for multiprocessing workers in fit generator.', type=int, default=10)
+    parser.add_argument('--multiprocessing',  help='Use multiprocessing in fit_generator.', action='store_true')
+    parser.add_argument('--workers',          help='Number of generator workers.', type=int, default=1)
+    parser.add_argument('--max-queue-size',   help='Queue length for multiprocessing workers in fit_generator.', type=int, default=10)
 
     return check_args(parser.parse_args(args))
 
@@ -439,13 +459,13 @@ def main(args=None):
     # create object that stores backbone information
     backbone = models.backbone(args.backbone)
 
-    # make sure keras is the minimum required version
+    # make sure keras and tensorflow are the minimum required version
     check_keras_version()
+    check_tf_version()
 
     # optionally choose specific GPU
     if args.gpu:
-        os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-    keras.backend.tensorflow_backend.set_session(get_session())
+        setup_gpu(args.gpu)
 
     # optionally load config parameters
     if args.config:
@@ -507,22 +527,20 @@ def main(args=None):
         args,
     )
 
-    # Use multiprocessing if workers > 0
-    if args.workers > 0:
-        use_multiprocessing = True
-    else:
-        use_multiprocessing = False
+    if not args.compute_val_loss:
+        validation_generator = None
 
     # start training
-    training_model.fit_generator(
+    return training_model.fit_generator(
         generator=train_generator,
         steps_per_epoch=args.steps,
         epochs=args.epochs,
         verbose=1,
         callbacks=callbacks,
         workers=args.workers,
-        use_multiprocessing=use_multiprocessing,
-        max_queue_size=args.max_queue_size
+        use_multiprocessing=args.multiprocessing,
+        max_queue_size=args.max_queue_size,
+        validation_data=validation_generator
     )
 
 
