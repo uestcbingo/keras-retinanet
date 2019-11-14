@@ -16,8 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-#import tensorflow.contrib.eager as tfe
-#tfe.enable_eager_execution()
+import tensorflow.contrib.eager as tfe
+tfe.enable_eager_execution()
 
 import argparse
 import os
@@ -527,8 +527,8 @@ def main(args=None):
         args,
     )
 
-    if not args.compute_val_loss:
-        validation_generator = None
+    # if not args.compute_val_loss:
+    #     validation_generator = None
 
     # start training
     return training_model.fit_generator(
